@@ -1,7 +1,7 @@
 #!/bin/bash
 # =====================================================
 # Stupix auto.sh
-# Runs automatically after boot and git clone
+# Automatically executed after boot and git clone.
 # All output is written to /var/log/stupix/
 # =====================================================
 
@@ -18,11 +18,13 @@ run_section() {
     local FILE="$LOG_DIR/${NAME}.log"
     shift
     log "Running section: $NAME -> $FILE"
-    echo "=== $NAME ===" > "$FILE"
-    echo "Timestamp: $(date)" >> "$FILE"
-    echo "" >> "$FILE"
-    "$@" >> "$FILE" 2>&1
-    echo "" >> "$FILE"
+    {
+        echo "=== $NAME ==="
+        echo "Timestamp: $(date)"
+        echo ""
+        "$@"
+        echo ""
+    } > "$FILE" 2>&1
     log "Section $NAME done."
 }
 
@@ -52,7 +54,7 @@ run_section "system-info" bash -c "
     echo '--- Uptime ---'
     uptime
     echo ''
-    echo '--- System Manufacturer / Model ---'
+    echo '--- System Manufacturer and Model ---'
     dmidecode -t system 2>/dev/null || echo 'dmidecode not available'
     echo ''
     echo '--- BIOS ---'
@@ -64,7 +66,7 @@ run_section "cpu" bash -c "
     echo '--- CPU Info ---'
     lscpu
     echo ''
-    echo '--- CPU Topology ---'
+    echo '--- CPU Topology (dmidecode) ---'
     dmidecode -t processor 2>/dev/null || echo 'dmidecode not available'
 "
 
@@ -73,7 +75,7 @@ run_section "memory" bash -c "
     echo '--- Memory Overview ---'
     free -h
     echo ''
-    echo '--- Memory Modules ---'
+    echo '--- Memory Modules (dmidecode) ---'
     dmidecode -t memory 2>/dev/null || echo 'dmidecode not available'
 "
 
@@ -88,15 +90,18 @@ run_section "storage" bash -c "
     echo '--- SCSI Devices ---'
     lsscsi 2>/dev/null || echo 'lsscsi not available'
     echo ''
-    echo '--- RAID (mdadm) ---'
-    mdadm --detail --scan 2>/dev/null || echo 'No software RAID or mdadm not available'
+    echo '--- Software RAID (mdadm) ---'
+    mdadm --detail --scan 2>/dev/null || echo 'No software RAID found'
+    echo ''
+    echo '--- Disk partitions ---'
+    fdisk -l 2>/dev/null || echo 'fdisk not available'
 "
 
 # ===== SMART =====
 run_section "smart" bash -c "
     for disk in \$(lsblk -d -n -o NAME | grep -E '^sd|^hd|^nvme'); do
         echo \"--- /dev/\$disk ---\"
-        smartctl -a /dev/\$disk 2>/dev/null || echo 'smartctl failed for /dev/'\$disk
+        smartctl -a /dev/\$disk 2>/dev/null || echo \"smartctl failed for /dev/\$disk\"
         echo ''
     done
 "
@@ -116,9 +121,10 @@ run_section "usb" bash -c "
 # ===== IPMI / BMC =====
 run_section "ipmi" bash -c "
     echo '--- Loading IPMI kernel modules ---'
-    modprobe ipmi_si 2>/dev/null && echo 'ipmi_si loaded' || echo 'ipmi_si not loadable'
-    modprobe ipmi_devintf 2>/dev/null && echo 'ipmi_devintf loaded' || echo 'ipmi_devintf not loadable'
-    modprobe ipmi_msghandler 2>/dev/null && echo 'ipmi_msghandler loaded' || echo 'ipmi_msghandler not loadable'
+    modprobe ipmi_si 2>/dev/null && echo 'ipmi_si loaded' || echo 'ipmi_si failed'
+    modprobe ipmi_devintf 2>/dev/null && echo 'ipmi_devintf loaded' || echo 'ipmi_devintf failed'
+    modprobe ipmi_msghandler 2>/dev/null && echo 'ipmi_msghandler loaded' || echo 'ipmi_msghandler failed'
+    sleep 1
     echo ''
     echo '--- Chassis Status ---'
     ipmitool chassis status 2>/dev/null || echo 'ipmitool chassis status failed'
@@ -132,23 +138,23 @@ run_section "ipmi" bash -c "
     echo '--- Sensor Data Records ---'
     ipmitool sdr list 2>/dev/null || echo 'ipmitool sdr list failed'
     echo ''
-    echo '--- System Event Log (last 20) ---'
+    echo '--- System Event Log (last 20 entries) ---'
     ipmitool sel list 2>/dev/null | tail -20 || echo 'ipmitool sel list failed'
     echo ''
     echo '--- freeipmi bmc-info ---'
     bmc-info 2>/dev/null || echo 'bmc-info not available'
     echo ''
-    echo '--- freeipmi ipmi-sensors ---'
+    echo '--- freeipmi ipmi-sensors (first 40 lines) ---'
     ipmi-sensors 2>/dev/null | head -40 || echo 'ipmi-sensors not available'
 "
 
-# ===== HARDWARE FULL =====
+# ===== FULL HARDWARE INVENTORY =====
 run_section "hardware-full" bash -c "
-    echo '--- lshw ---'
+    echo '--- lshw full output ---'
     lshw 2>/dev/null || echo 'lshw not available'
 "
 
-# ===== SUMMARY to auto.log =====
+# ===== SUMMARY =====
 log ""
 log "=== Summary ==="
 log "Log files written to $LOG_DIR:"
@@ -158,12 +164,11 @@ log "Network addresses:"
 ip -4 addr show | grep "inet " | grep -v "127.0.0.1" | awk '{print "  " $2}' | tee -a "$LOG_DIR/auto.log"
 log ""
 log "=== auto.sh complete ==="
-log "All results are in: $LOG_DIR"
 
-# Print summary to console
+# Print status to console (always visible on tty)
 echo ""
 echo "============================================================"
-echo " STUPIX - Server Diagnostics Live System"
+echo " Stupix - Server Diagnostics Live System"
 echo "============================================================"
 echo " Hostname   : $(hostname)"
 echo " Kernel     : $(uname -r)"
