@@ -32,6 +32,11 @@ log "Scripts: $SCRIPT_DIR"
 log "Logs:    $LOG_DIR"
 log ""
 
+# ---- dependency check (always runs first) ----
+log "Running: check-deps"
+bash "$SCRIPT_DIR/check-deps.sh" 2>&1 | tee -a "$LOG_DIR/auto.log"
+log ""
+
 # ---- diagnostic sections (stdout captured to .log files) ----
 run_section "network"       "$SECTIONS_DIR/network.sh"
 run_section "system-info"   "$SECTIONS_DIR/system-info.sh"
