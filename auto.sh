@@ -88,6 +88,7 @@ ls "$LOG_DIR" | awk '{printf "   %s\n", $1}'
 echo ""
 echo " Quick access:"
 echo "   cat $LOG_DIR/serials.log"
-echo "   cat $LOG_DIR/inventory.json | python3 -m json.tool"
+echo "   python3 -m json.tool $LOG_DIR/inventory.json"
 echo "   cat $LOG_DIR/dmesg-errors.log"
+echo "   cat $LOG_DIR/check-deps.log"
 echo "============================================================"
