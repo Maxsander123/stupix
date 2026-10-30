@@ -26,7 +26,21 @@ Sections and their log files:
     usb.log            - USB devices
     ipmi.log           - IPMI chassis, BMC info, FRU, SDR sensors, SEL events
     hardware-full.log  - Full lshw hardware inventory
+    benchmark.log      - stupix-bench scores and health checks (+ benchmark.json)
     auto.log           - Main log with timestamps for all sections
+
+## stupix-bench
+
+bench/ contains stupix-bench, a dependency-free system benchmark (C with
+hand-written x86_64/aarch64/riscv64 assembly kernels). It scores CPU,
+memory, storage, GPU, chipset/PCIe, BMC, thermals and power and runs
+health checks (SMART, PCIe AER/link width, ECC, BMC self test, throttling).
+It also runs standalone on any machine:
+
+    bash bench/run.sh --quick
+
+See bench/README.md. auto.sh runs it as the "benchmark" section; skip it
+with the kernel parameter stupix.nobench.
 
 ## Adding custom scripts
 
