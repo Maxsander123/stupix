@@ -74,6 +74,7 @@ static double bandwidth(uint64_t *buf, uint64_t *dst, size_t words, int threads,
 /* random cyclic pointer chain, one pointer per 64-byte line (Sattolo shuffle) */
 static void build_chain(void **buf, size_t bytes)
 {
+    const size_t stride = 64 / sizeof(void *); /* one pointer per 64-byte line on 32 and 64 bit */
     size_t lines = bytes / 64, i;
     size_t *idx = (size_t *)malloc(lines * sizeof(size_t));
     uint64_t s = 0x9876543210ULL;
@@ -87,7 +88,7 @@ static void build_chain(void **buf, size_t bytes)
         idx[j] = t;
     }
     for (i = 0; i < lines; i++)
-        buf[idx[i] * 8] = &buf[idx[(i + 1) % lines] * 8];
+        buf[idx[i] * stride] = &buf[idx[(i + 1) % lines] * stride];
     free(idx);
 }
 

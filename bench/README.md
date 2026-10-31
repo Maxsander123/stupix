@@ -24,7 +24,7 @@ part a score where **1000 = reference system**.
     ./run.sh --json report.json # machine readable report
     ./run.sh --selftest         # verify assembly kernels against C reference
 
-Without a shell (Windows): `bin\stupix-bench-windows-x86_64.exe --quick`.
+Windows: `run.cmd --quick` (picks the x86, x64 or ARM64 build).
 
 Run as root on Linux to get the BMC, SMART, raw device, DIMM (SMBIOS) and
 RAPL data.
@@ -59,13 +59,34 @@ Comparable results need the same conditions: AC power, idle system, same
 
 ## Platforms
 
-| Platform | Status |
-|----------|--------|
-| Linux x86_64 | native build, all modules tested |
-| Linux aarch64, riscv64 | static binaries, asm selftest and modules run under qemu-user |
-| Windows x86_64 | binary cross-built with MinGW (asm kernels included), not run on Windows yet; CPU/memory/disk/GPU work, hardware probes are Linux-only |
-| macOS, FreeBSD/OpenBSD/NetBSD, other Unix | code paths present (sysctl, F_NOCACHE, pthreads), build from source with `./build.sh`; not tested yet |
-| other CPUs (ppc64, s390x, mips, loongarch, 32-bit) | portable C kernels (`STX_NO_ASM` automatically) |
+`bin/` ships ready-to-run binaries. The Linux ones are fully static and run
+on any distribution and libc. `run.sh` and `run.cmd` pick the right one
+automatically when no compiler is installed.
+
+| Binary | CPUs | Kernels | Tested |
+|--------|------|---------|--------|
+| `linux-x86_64` | any x86-64 | full asm | native |
+| `linux-x86` | i686 and newer (32-bit) | C + asm clock/cpuid | native 32-bit (setarch) + qemu pentium3 |
+| `linux-aarch64` | any ARMv8+ (Raspberry Pi 3/4/5, Graviton, Ampere, Jetson, ...) | full asm | qemu |
+| `linux-arm` | ARMv6+ with VFP, hard-float (every Raspberry Pi incl. Zero/1, ARMv7 boards) | C + asm clock | qemu arm1176 |
+| `linux-armel` | ARMv5TE+ soft-float (old NAS/routers/boards) | C + asm clock | qemu arm926 |
+| `linux-riscv64` | RV64GC (VisionFive, Milk-V, SiFive, ...) | full asm | qemu |
+| `linux-riscv32` | RV32 with Linux | C | qemu |
+| `linux-ppc64le`, `linux-s390x`, `linux-loongarch64` | POWER8+, IBM Z, LoongArch | C | qemu |
+| `windows-x86_64` | x64 | full asm | wine |
+| `windows-x86` | 32-bit x86 | C + asm clock/cpuid | wine (32-bit) |
+| `windows-aarch64` | Windows on ARM | full asm | build only |
+| `macos-aarch64` | Apple Silicon (ad-hoc signed) | full asm | build only |
+| `macos-x86_64` | Intel Macs | full asm | build only |
+
+Every other OS or CPU with a C compiler (FreeBSD, OpenBSD, NetBSD, other
+Unix, 32-bit MIPS, ...) builds from source with `./build.sh`. It uses the
+portable C kernels when no assembly exists for that CPU.
+
+CPU identification covers x86 (cpuid), ARM (implementer/part decoding, e.g.
+Cortex-A76, Neoverse-N1, Kunpeng, big.LITTLE combinations) and RISC-V
+(`uarch`/`isa`). Hardware probes (SMART, IPMI, PCIe, sensors, RAPL) are
+Linux-only. On macOS and Windows, CPU, memory, disk and GPU run.
 
 ## Building
 
@@ -73,20 +94,23 @@ Comparable results need the same conditions: AC power, idle system, same
     ./build.sh --static         # static Linux binary (GPU compute disabled: no dlopen)
     ./build.sh --no-asm         # portable C kernels only
     CC=x86_64-w64-mingw32-gcc ./build.sh --static --out stupix-bench.exe
-    ./release.sh                # rebuild bin/ for all targets in docker + qemu selftests
+    ./release.sh                # rebuild bin/ for all 15 targets (zig cc in docker),
+                                # then run them under qemu-user / wine
 
 Only a C compiler is needed, not make. If the assembler step fails on an
 unusual toolchain, `build.sh` falls back to the C kernels automatically.
 
 ## Layout
 
-    src/asm/kernels.S   hand-written kernels: x86_64 (SysV + Win64), aarch64, riscv64
+    src/asm/kernels.S   hand-written kernels: x86_64 (SysV + Win64), aarch64, riscv64,
+                        clock/cpuid for 32-bit x86 and ARM
     src/kernels.c       bit-exact C twins, dispatch, selftest, calibration
     src/platform.c      timers, threads, files, dlopen for POSIX and Windows
     src/report.c        console report, scoring, JSON
     src/sensors.c       temperatures, clocks, RAPL, battery (sysfs)
     src/mod_*.c         one file per module
-    bin/                bundled static binaries (rebuilt by release.sh)
+    bin/                bundled binaries for 15 platforms (rebuilt by release.sh)
+    run.sh / run.cmd    launchers for Unix / Windows
 
 The asm kernels use only caller-saved registers (Win64 xmm6-9 are saved
 explicitly), so they need no stack frames or unwind tables.

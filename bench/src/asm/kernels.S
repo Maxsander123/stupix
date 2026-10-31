@@ -20,9 +20,9 @@
 
 #include "../stx.h"
 
-#if defined(STX_ASM)
+#if defined(STX_ASM) || defined(STX_ASM_CLOCK)
 
-#if defined(__APPLE__)
+#if defined(__APPLE__) || (defined(_WIN32) && defined(__i386__))
 #define SYM(x) _##x
 #else
 #define SYM(x) x
@@ -688,9 +688,83 @@ SYM(stx_a_clock):
     ret
     SIZE(stx_a_clock)
 
+/* ======================================================================= */
+#elif defined(__i386__)
+/* cdecl: arguments on the stack. Clock and cpuid only; iteration counts
+   stay far below 2^32 at benchmark durations, so the high word is ignored. */
+
+    .globl SYM(stx_a_clock)
+    TYPE(stx_a_clock)
+    .p2align 4
+SYM(stx_a_clock):
+    push    %ebx
+    mov     8(%esp), %ecx
+    xor     %eax, %eax
+    xor     %edx, %edx
+    mov     $1, %ebx
+    test    %ecx, %ecx
+    jz      2f
+    .p2align 4
+1:
+    .rept 64
+    add     %ebx, %eax
+    .endr
+    dec     %ecx
+    jnz     1b
+2:
+    pop     %ebx
+    ret
+    SIZE(stx_a_clock)
+
+    .globl SYM(stx_a_cpuid)
+    TYPE(stx_a_cpuid)
+    .p2align 4
+SYM(stx_a_cpuid):
+    push    %ebx
+    push    %edi
+    mov     12(%esp), %eax
+    mov     16(%esp), %ecx
+    mov     20(%esp), %edi
+    cpuid
+    mov     %eax, 0(%edi)
+    mov     %ebx, 4(%edi)
+    mov     %ecx, 8(%edi)
+    mov     %edx, 12(%edi)
+    pop     %edi
+    pop     %ebx
+    ret
+    SIZE(stx_a_cpuid)
+
+/* ======================================================================= */
+#elif defined(__arm__)
+/* AAPCS: uint64 argument in r0:r1, result in r0:r1. ARM state, works from
+   Thumb callers through bx/blx interworking; ARMv4T and newer. */
+    .syntax unified
+    .arm
+
+    .globl SYM(stx_a_clock)
+    TYPE(stx_a_clock)
+    .p2align 2
+SYM(stx_a_clock):
+    mov     r2, r0
+    mov     r0, #0
+    mov     r1, #0
+    mov     r3, #1
+    cmp     r2, #0
+    beq     2f
+1:
+    .rept 64
+    add     r0, r0, r3
+    .endr
+    subs    r2, r2, #1
+    bne     1b
+2:
+    bx      lr
+    SIZE(stx_a_clock)
+
 #endif /* arch */
 
-#endif /* STX_ASM */
+#endif /* STX_ASM || STX_ASM_CLOCK */
 
 #if defined(__ELF__)
     .section .note.GNU-stack, "", %progbits

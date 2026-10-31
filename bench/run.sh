@@ -52,9 +52,26 @@ install_cc() {
 arch() {
     case "$(uname -m)" in
         x86_64|amd64) echo x86_64 ;;
-        aarch64|arm64) echo aarch64 ;;
+        i[3-6]86|x86|i86pc) echo x86 ;;
+        aarch64|arm64|armv8b|aarch64_be) echo aarch64 ;;
+        armv[6-8]*|armhf)
+            # hard-float build needs a VFP unit (every Raspberry Pi has one)
+            if grep -qw vfp /proc/cpuinfo 2>/dev/null; then echo arm; else echo armel; fi ;;
+        arm*) echo armel ;;
         riscv64) echo riscv64 ;;
+        riscv32) echo riscv32 ;;
+        ppc64le) echo ppc64le ;;
+        s390x) echo s390x ;;
+        loongarch64) echo loongarch64 ;;
         *) uname -m ;;
+    esac
+}
+
+os() {
+    case "$(uname -s)" in
+        Linux) echo linux ;;
+        Darwin) echo macos ;;
+        *) uname -s | tr 'A-Z' 'a-z' ;;
     esac
 }
 
@@ -71,11 +88,15 @@ if stale; then
 fi
 
 if [ ! -x "$BIN" ]; then
-    OS=$(uname -s | tr 'A-Z' 'a-z')
+    OS=$(os)
     PRE="$DIR/bin/stupix-bench-$OS-$(arch)"
     if [ -f "$PRE" ]; then
         chmod +x "$PRE" 2>/dev/null
-        msg "using bundled static binary $(basename "$PRE") (no GPU compute in static builds)"
+        if [ "$OS" = linux ]; then
+            msg "using bundled static binary $(basename "$PRE") (no GPU compute in static builds)"
+        else
+            msg "using bundled binary $(basename "$PRE")"
+        fi
         BIN="$PRE"
     else
         msg "no compiler available and no bundled binary for $OS-$(arch)"

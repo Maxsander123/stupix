@@ -91,6 +91,11 @@ uint64_t stx_a_clock(uint64_t iters);
 #ifdef STX_ARCH_X86_64
 void stx_a_cpuid(uint32_t leaf, uint32_t sub, uint32_t out[4]);
 #endif
+#elif defined(STX_ASM_CLOCK)
+uint64_t stx_a_clock(uint64_t iters);
+#ifdef __i386__
+void stx_a_cpuid(uint32_t leaf, uint32_t sub, uint32_t out[4]);
+#endif
 #endif
 
 void stx_kernels_init(void)
@@ -109,14 +114,19 @@ void stx_kernels_init(void)
     stx_k.k_read = stx_c_read;
     stx_k.k_write = stx_c_write;
     stx_k.k_chase = stx_c_chase;
+#ifdef STX_ASM_CLOCK
+    stx_k.k_clock = stx_a_clock;
+    stx_k.impl = "portable C + assembly clock (" STX_ARCH_NAME ")";
+#else
     stx_k.k_clock = NULL;
     stx_k.impl = "portable C (" STX_ARCH_NAME ")";
+#endif
 #endif
 }
 
 int stx_cpuid(uint32_t leaf, uint32_t sub, uint32_t out[4])
 {
-#if defined(STX_ASM) && defined(STX_ARCH_X86_64)
+#if (defined(STX_ASM) && defined(STX_ARCH_X86_64)) || (defined(STX_ASM_CLOCK) && defined(__i386__))
     stx_a_cpuid(leaf, sub, out);
     return 1;
 #else
@@ -180,7 +190,14 @@ int stx_kernels_selftest(void)
     fails += r1 != 64000;
     stx_free(buf);
 #else
-    printf("  no assembly kernels for %s, using portable C\n", STX_ARCH_NAME);
+    printf("  no full assembly kernel set for %s, using portable C\n", STX_ARCH_NAME);
+#ifdef STX_ASM_CLOCK
+    {
+        uint64_t r = stx_a_clock(1000);
+        printf("  clock  %llu adds %s\n", (unsigned long long)r, r == 64000 ? "OK" : "MISMATCH");
+        fails += r != 64000;
+    }
+#endif
 #endif
     return fails;
 }

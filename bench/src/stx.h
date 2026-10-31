@@ -40,6 +40,8 @@
 #elif defined(__riscv) && __riscv_xlen == 64
 #define STX_ARCH_NAME "riscv64"
 #define STX_ARCH_RISCV64 1
+#elif defined(__riscv) && __riscv_xlen == 32
+#define STX_ARCH_NAME "riscv32"
 #elif defined(__i386__) || defined(_M_IX86)
 #define STX_ARCH_NAME "x86"
 #elif defined(__arm__)
@@ -60,6 +62,12 @@
     (defined(STX_ARCH_X86_64) || defined(STX_ARCH_AARCH64) || \
      (defined(STX_ARCH_RISCV64) && defined(__riscv_d)))
 #define STX_ASM 1
+#endif
+
+/* 32-bit x86 and ARM: C kernels plus asm clock (and cpuid on x86) */
+#if !defined(STX_NO_ASM) && !defined(STX_ASM) && defined(__GNUC__) && \
+    (defined(__i386__) || (defined(__arm__) && defined(__ELF__)))
+#define STX_ASM_CLOCK 1
 #endif
 
 #ifndef __ASSEMBLER__

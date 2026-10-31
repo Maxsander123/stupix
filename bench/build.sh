@@ -33,17 +33,18 @@ if [ -z "$CC" ]; then
     exit 1
 fi
 
-TARGET_OS=$($CC -dumpmachine 2>/dev/null || uname -s)
-CFLAGS="${CFLAGS:--O2} -std=gnu99 -ffp-contract=off -fno-strict-aliasing -Wall -Wno-unused-result -Wno-format-truncation"
+# TARGET_OS may be preset when cross compiling with compilers lacking -dumpmachine
+[ -n "$TARGET_OS" ] || TARGET_OS=$($CC -dumpmachine 2>/dev/null || uname -s)
+CFLAGS="${CFLAGS:--O2} -D_FILE_OFFSET_BITS=64 -std=gnu99 -ffp-contract=off -fno-strict-aliasing -Wall -Wno-unused-result -Wno-format-truncation"
 LIBS="-lm"
 EXE=""
 case "$TARGET_OS" in
-    *mingw*|*windows*|*cygwin*|MINGW*|MSYS*) EXE=".exe" ;;
-    *darwin*|*apple*|Darwin) ;;
+    *mingw*|*windows*|*cygwin*|MINGW*|MSYS*) EXE=".exe"; CFLAGS="$CFLAGS -D__USE_MINGW_ANSI_STDIO=1" ;;
+    *darwin*|*apple*|*macos*|Darwin) STATIC_OK=0 ;;
     *linux*|Linux) LIBS="$LIBS -lpthread -ldl" ;;
     *) LIBS="$LIBS -lpthread" ;;
 esac
-if [ "$STATIC" = 1 ]; then
+if [ "$STATIC" = 1 ] && [ "${STATIC_OK:-1}" = 1 ]; then
     CFLAGS="$CFLAGS -DSTX_NO_DLOPEN"
     LDFLAGS="$LDFLAGS -static"
     LIBS=$(echo "$LIBS" | sed 's/-ldl//')

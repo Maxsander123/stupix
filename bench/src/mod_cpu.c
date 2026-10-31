@@ -186,6 +186,74 @@ static double measure_mt(double (*fn)(uint64_t, void *), void **ctxs)
 }
 
 /* ---- identification ---- */
+#if defined(STX_OS_LINUX)
+/* ARM cores from "CPU implementer" / "CPU part" (aarch64 /proc/cpuinfo has no model name) */
+static void arm_model(const char *cpuinfo, char *out, size_t len)
+{
+    static const struct {
+        unsigned impl, part;
+        const char *name;
+    } parts[] = {
+        {0x41, 0xb76, "ARM1176"},          {0x41, 0xc07, "Cortex-A7"},         {0x41, 0xc08, "Cortex-A8"},
+        {0x41, 0xc09, "Cortex-A9"},        {0x41, 0xc0f, "Cortex-A15"},        {0x41, 0xc0e, "Cortex-A17"},
+        {0x41, 0xd03, "Cortex-A53"},       {0x41, 0xd04, "Cortex-A35"},        {0x41, 0xd05, "Cortex-A55"},
+        {0x41, 0xd07, "Cortex-A57"},       {0x41, 0xd08, "Cortex-A72"},        {0x41, 0xd09, "Cortex-A73"},
+        {0x41, 0xd0a, "Cortex-A75"},       {0x41, 0xd0b, "Cortex-A76"},        {0x41, 0xd0c, "Neoverse-N1"},
+        {0x41, 0xd0d, "Cortex-A77"},       {0x41, 0xd40, "Neoverse-V1"},       {0x41, 0xd41, "Cortex-A78"},
+        {0x41, 0xd44, "Cortex-X1"},        {0x41, 0xd46, "Cortex-A510"},       {0x41, 0xd47, "Cortex-A710"},
+        {0x41, 0xd48, "Cortex-X2"},        {0x41, 0xd49, "Neoverse-N2"},       {0x41, 0xd4a, "Neoverse-E1"},
+        {0x41, 0xd4b, "Cortex-A78C"},      {0x41, 0xd4d, "Cortex-A715"},       {0x41, 0xd4e, "Cortex-X3"},
+        {0x41, 0xd4f, "Neoverse-V2"},      {0x41, 0xd80, "Cortex-A520"},       {0x41, 0xd81, "Cortex-A720"},
+        {0x41, 0xd82, "Cortex-X4"},        {0x41, 0xd84, "Neoverse-V3"},       {0x41, 0xd8e, "Neoverse-N3"},
+        {0x48, 0xd01, "HiSilicon Kunpeng 920"}, {0x46, 0x001, "Fujitsu A64FX"}, {0xc0, 0xac3, "AmpereOne"},
+        {0x51, 0x800, "Qualcomm Kryo 2xx Gold"}, {0x51, 0x801, "Qualcomm Kryo 2xx Silver"},
+        {0x51, 0x001, "Qualcomm Oryon"},   {0x4e, 0x004, "NVIDIA Carmel"},     {0x61, 0x022, "Apple M1 Icestorm"},
+        {0x61, 0x023, "Apple M1 Firestorm"},
+    };
+    static const struct {
+        unsigned impl;
+        const char *name;
+    } impls[] = {{0x41, "ARM"},       {0x42, "Broadcom"}, {0x43, "Cavium"},  {0x46, "Fujitsu"}, {0x48, "HiSilicon"},
+                 {0x4e, "NVIDIA"},    {0x50, "APM"},      {0x51, "Qualcomm"}, {0x61, "Apple"},  {0x69, "Intel"},
+                 {0xc0, "Ampere"},    {0x6d, "Microsoft"}};
+    const char *p;
+    unsigned impl = 0, part = 0;
+    size_t i;
+    char seen[256] = "";
+    out[0] = 0;
+    /* collect distinct cores (big.LITTLE lists several) */
+    for (p = cpuinfo; (p = strstr(p, "CPU implementer")) != NULL;) {
+        const char *q = strchr(p, ':'), *r;
+        if (!q)
+            break;
+        impl = (unsigned)strtoul(q + 1, NULL, 0);
+        r = strstr(q, "CPU part");
+        if (!r || !(q = strchr(r, ':')))
+            break;
+        part = (unsigned)strtoul(q + 1, NULL, 0);
+        p = q;
+        {
+            char name[64] = "";
+            for (i = 0; i < sizeof(parts) / sizeof(parts[0]); i++)
+                if (parts[i].impl == impl && parts[i].part == part)
+                    snprintf(name, sizeof(name), "%s", parts[i].name);
+            if (!name[0]) {
+                const char *iv = "unknown";
+                for (i = 0; i < sizeof(impls) / sizeof(impls[0]); i++)
+                    if (impls[i].impl == impl)
+                        iv = impls[i].name;
+                snprintf(name, sizeof(name), "%s part 0x%03x", iv, part);
+            }
+            if (!strstr(seen, name)) {
+                size_t l = strlen(seen);
+                snprintf(seen + l, sizeof(seen) - l, "%s%s", l ? " + " : "", name);
+            }
+        }
+    }
+    snprintf(out, len, "%s", seen);
+}
+#endif
+
 static void cpu_identify(void)
 {
     char model[256] = "", features[512] = "";
@@ -253,7 +321,8 @@ static void cpu_identify(void)
     }
 #if defined(STX_OS_LINUX)
     if (!model[0] || !features[0]) {
-        char buf[16384], *p;
+        static char buf[65536];
+        char *p;
         if (stx_read_text("/proc/cpuinfo", buf, sizeof(buf)) > 0) {
             static const char *keys[] = {"model name", "Model", "Hardware", "cpu model", "uarch", "cpu", NULL};
             int k;
@@ -269,6 +338,8 @@ static void cpu_identify(void)
                     }
                 }
             }
+            if (!model[0])
+                arm_model(buf, model, sizeof(model));
             if (!features[0]) {
                 p = strstr(buf, "Features");
                 if (!p)
